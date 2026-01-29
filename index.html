@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gry Przeglądarkowe Offline</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f0f0f0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        #menu { text-align: center; }
+        button { padding: 10px 20px; margin: 10px; font-size: 18px; cursor: pointer; }
+        .game { display: none; text-align: center; }
+        canvas { background: #fff; border: 1px solid #000; }
+        footer { position: fixed; bottom: 10px; text-align: center; width: 100%; }
+        @media (max-width: 600px) { button { font-size: 16px; padding: 8px 16px; } canvas { width: 90%; height: auto; } }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>Wybierz Grę</h1>
+        <button onclick="startGame('ticTacToe')">Tic-Tac-Toe</button>
+        <button onclick="startGame('snake')">Snake</button>
+        <button onclick="startGame('2048')">2048</button>
+        <button onclick="startGame('minesweeper')">Minesweeper</button>
+        <br>
+        <button id="muteBtn" onclick="toggleMusic()">Wycisz Muzykę</button>
+    </div>
+
+    <div id="ticTacToe" class="game">
+        <h2>Tic-Tac-Toe</h2>
+        <div id="board" style="display: grid; grid-template-columns: repeat(3, 100px); grid-gap: 5px; margin: auto;"></div>
+        <p id="tttStatus">Twój ruch: X</p>
+        <button onclick="backToMenu()">Powrót</button>
+    </div>
+
+    <div id="snake" class="game">
+        <h2>Snake</h2>
+        <canvas id="snakeCanvas" width="400" height="400"></canvas>
+        <p id="snakeScore">Punkty: 0</p>
+        <button onclick="backToMenu()">Powrót</button>
+    </div>
+
+    <div id="2048" class="game">
+        <h2>2048</h2>
+        <div id="grid" style="display: grid; grid-template-columns: repeat(4, 80px); grid-gap: 5px; background: #bbada0; padding: 5px; margin: auto;"></div>
+        <p id="2048Score">Punkty: 0</p>
+        <button onclick="backToMenu()">Powrót</button>
+    </div>
+
+    <div id="minesweeper" class="game">
+        <h2>Minesweeper</h2>
+        <div id="mineBoard" style="display: grid; grid-template-columns: repeat(8, 40px); grid-gap: 2px; margin: auto;"></div>
+        <p id="mineStatus">Kliknij, aby odkryć</p>
+        <button onclick="backToMenu()">Powrót</button>
+    </div>
+
+    <footer>
+        Autor: Damian Kita (<a href="https://linktr.ee/kitadamian" target="_blank">https://linktr.ee/kitadamian</a>)
+    </footer>
+
+    <script>
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let musicOscillator, musicGain, isMusicPlaying = true;
+
+        function playSound(freq = 440, duration = 0.1) {
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function startMusic() {
+            musicOscillator = audioCtx.createOscillator();
+            musicGain = audioCtx.createGain();
+            musicOscillator.connect(musicGain);
+            musicGain.connect(audioCtx.destination);
+            musicOscillator.type = 'square';
+            musicGain.gain.value = 0.05;
+            let notes = [440, 494, 523, 587, 659, 698, 784, 880];
+            let i = 0;
+            setInterval(() => {
+                if (isMusicPlaying) {
+                    musicOscillator.frequency.value = notes[i % notes.length];
+                    i++;
+                }
+            }, 300);
+            musicOscillator.start();
+        }
+
+        function toggleMusic() {
+            isMusicPlaying = !isMusicPlaying;
+            document.getElementById('muteBtn').textContent = isMusicPlaying ? 'Wycisz Muzykę' : 'Włącz Muzykę';
+            musicGain.gain.value = isMusicPlaying ? 0.05 : 0;
+        }
+
+        window.onload = startMusic;
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => playSound(600, 0.05));
+        });
+
+        function startGame(game) {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById(game).style.display = 'block';
+            if (game === 'ticTacToe') initTicTacToe();
+            if (game === 'snake') initSnake();
+            if (game === '2048') init2048();
+            if (game === 'minesweeper') initMinesweeper();
+        }
+
+        function backToMenu() {
+            document.querySelectorAll('.game').forEach(g => g.style.display = 'none');
+            document.getElementById('menu').style.display = 'block';
+        }
+
+        // Tic-Tac-Toe Implementation
+        function initTicTacToe() {
+            let board = document.getElementById('board');
+            board.innerHTML = '';
+            let cells = [];
+            let player = 'X';
+            let status = document.getElementById('tttStatus');
+            for (let i = 0; i < 9; i++) {
+                let cell = document.createElement('div');
+                cell.style.width = '100px';
+                cell.style.height = '100px';
+                cell.style.background = '#ddd';
+                cell.style.display = 'flex';
+                cell.style.alignItems = 'center';
+                cell.style.justifyContent = 'center';
+                cell.style.fontSize = '50px';
+                cell.onclick = () => {
+                    if (!cell.textContent) {
+                        cell.textContent = player;
+                        playSound(player === 'X' ? 500 : 600);
+                        if (checkWin()) status.textContent = `${player} wygrywa!`;
+                        else if (cells.every(c => c.textContent)) status.textContent = 'Remis!';
+                        else {
+                            player = player === 'X' ? 'O' : 'X';
+                            status.textContent = `Twój ruch: ${player}`;
+                        }
+                    }
+                };
+                board.appendChild(cell);
+                cells.push(cell);
+            }
+            function checkWin() {
+                const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+                return wins.some(w => cells[w[0]].textContent && cells[w[0]].textContent === cells[w[1]].textContent && cells[w[1]].textContent === cells[w[2]].textContent);
+            }
+        }
+
+        // Snake Implementation (based on simple gist example)
+        function initSnake() {
+            const canvas = document.getElementById('snakeCanvas');
+            const ctx = canvas.getContext('2d');
+            const grid = 20;
+            let count = 0;
+            let snake = { x: 160, y: 160, dx: grid, dy: 0, cells: [], maxCells: 4 };
+            let apple = { x: 320, y: 320 };
+            document.addEventListener('keydown', e => {
+                if (e.which === 37 && snake.dx === 0) { snake.dx = -grid; snake.dy = 0; }
+                else if (e.which === 38 && snake.dy === 0) { snake.dy = -grid; snake.dx = 0; }
+                else if (e.which === 39 && snake.dx === 0) { snake.dx = grid; snake.dy = 0; }
+                else if (e.which === 40 && snake.dy === 0) { snake.dy = grid; snake.dx = 0; }
+            });
+            function loop() {
+                requestAnimationFrame(loop);
+                if (++count < 4) return;
+                count = 0;
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                snake.x += snake.dx;
+                snake.y += snake.dy;
+                if (snake.x >= canvas.width) snake.x = 0;
+                else if (snake.x < 0) snake.x = canvas.width;
+                if (snake.y >= canvas.height) snake.y = 0;
+                else if (snake.y < 0) snake.y = canvas.height;
+                snake.cells.unshift({x: snake.x, y: snake.y});
+                if (snake.cells.length > snake.maxCells) snake.cells.pop();
+                if (snake.x === apple.x && snake.y === apple.y) {
+                    snake.maxCells++;
+                    apple.x = Math.floor(Math.random() * (canvas.width / grid)) * grid;
+                    apple.y = Math.floor(Math.random() * (canvas.height / grid)) * grid;
+                    playSound(700, 0.2);
+                    document.getElementById('snakeScore').textContent = `Punkty: ${snake.maxCells - 4}`;
+                }
+                snake.cells.forEach((cell, index) => {
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(cell.x, cell.y, grid-1, grid-1);
+                    if (index === 0) return;
+                    if (cell.x === snake.x && cell.y === snake.y) {
+                        snake.x = 160; snake.y = 160; snake.cells = []; snake.maxCells = 4; snake.dx = grid; snake.dy = 0;
+                        document.getElementById('snakeScore').textContent = 'Punkty: 0';
+                    }
+                });
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(apple.x, apple.y, grid-1, grid-1);
+            }
+            requestAnimationFrame(loop);
+        }
+
+        // 2048 Simplified Implementation
+        function init2048() {
+            let grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            let board = Array(16).fill(0);
+            let score = 0;
+            addTile(); addTile();
+            draw();
+            document.addEventListener('keydown', handleKey);
+            function addTile() {
+                let empty = board.map((v, i) => v === 0 ? i : -1).filter(i => i !== -1);
+                if (empty.length) {
+                    let pos = empty[Math.floor(Math.random() * empty.length)];
+                    board[pos] = Math.random() < 0.9 ? 2 : 4;
+                }
+            }
+            function draw() {
+                grid.innerHTML = '';
+                board.forEach(v => {
+                    let tile = document.createElement('div');
+                    tile.style.width = '80px'; tile.style.height = '80px'; tile.style.background = v ? '#eee' : '#ccc';
+                    tile.style.display = 'flex'; tile.style.alignItems = 'center'; tile.style.justifyContent = 'center';
+                    tile.style.fontSize = '30px'; tile.textContent = v || '';
+                    grid.appendChild(tile);
+                });
+                document.getElementById('2048Score').textContent = `Punkty: ${score}`;
+            }
+            function slide(line) {
+                let newLine = line.filter(v => v);
+                for (let i = 0; i < newLine.length - 1; i++) {
+                    if (newLine[i] === newLine[i+1]) {
+                        newLine[i] *= 2; score += newLine[i]; newLine[i+1] = 0;
+                        playSound(800, 0.1);
+                    }
+                }
+                newLine = newLine.filter(v => v);
+                while (newLine.length < 4) newLine.push(0);
+                return newLine;
+            }
+            function move(dir) {
+                let moved = false;
+                for (let i = 0; i < 4; i++) {
+                    let line = [];
+                    if (dir === 'left' || dir === 'right') line = board.slice(i*4, i*4+4);
+                    else line = [board[i], board[i+4], board[i+8], board[i+12]];
+                    let newLine = slide(dir === 'right' || dir === 'down' ? line.reverse() : line);
+                    if (dir === 'right' || dir === 'down') newLine.reverse();
+                    if (JSON.stringify(line) !== JSON.stringify(newLine)) moved = true;
+                    if (dir === 'left' || dir === 'right') board.splice(i*4, 4, ...newLine);
+                    else [board[i], board[i+4], board[i+8], board[i+12]] = newLine;
+                }
+                if (moved) addTile();
+                draw();
+            }
+            function handleKey(e) {
+                if (e.key === 'ArrowLeft') move('left');
+                if (e.key === 'ArrowRight') move('right');
+                if (e.key === 'ArrowUp') move('up');
+                if (e.key === 'ArrowDown') move('down');
+            }
+        }
+
+        // Minesweeper Simplified Implementation
+        function initMinesweeper() {
+            let board = document.getElementById('mineBoard');
+            board.innerHTML = '';
+            let size = 8, mines = 10;
+            let cells = Array(size*size).fill(0);
+            let revealed = Array(size*size).fill(false);
+            let flags = Array(size*size).fill(false);
+            for (let i = 0; i < mines; i++) {
+                let pos = Math.floor(Math.random() * cells.length);
+                if (cells[pos] === -1) i--;
+                else cells[pos] = -1;
+            }
+            for (let i = 0; i < size*size; i++) if (cells[i] !== -1) {
+                let count = 0;
+                let neighbors = getNeighbors(i);
+                neighbors.forEach(n => { if (cells[n] === -1) count++; });
+                cells[i] = count;
+            }
+            function getNeighbors(idx) {
+                let n = [];
+                let row = Math.floor(idx / size), col = idx % size;
+                for (let r = -1; r <= 1; r++) for (let c = -1; c <= 1; c++) {
+                    if (r === 0 && c === 0) continue;
+                    let nr = row + r, nc = col + c;
+                    if (nr >= 0 && nr < size && nc >= 0 && nc < size) n.push(nr * size + nc);
+                }
+                return n;
+            }
+            function reveal(idx) {
+                if (revealed[idx] || flags[idx]) return;
+                revealed[idx] = true;
+                playSound(500, 0.05);
+                if (cells[idx] === -1) {
+                    document.getElementById('mineStatus').textContent = 'Przegrałeś!';
+                    revealed.fill(true);
+                } else if (cells[idx] === 0) getNeighbors(idx).forEach(reveal);
+                if (revealed.filter(r => r).length === size*size - mines) document.getElementById('mineStatus').textContent = 'Wygrana!';
+                draw();
+            }
+            function flag(idx) {
+                if (!revealed[idx]) flags[idx] = !flags[idx];
+                draw();
+            }
+            function draw() {
+                board.innerHTML = '';
+                cells.forEach((v, i) => {
+                    let cell = document.createElement('div');
+                    cell.style.width = '40px'; cell.style.height = '40px'; cell.style.background = revealed[i] ? '#ddd' : '#aaa';
+                    cell.style.display = 'flex'; cell.style.alignItems = 'center'; cell.style.justifyContent = 'center';
+                    cell.style.fontSize = '20px';
+                    if (revealed[i]) cell.textContent = v === -1 ? '💣' : v || '';
+                    else if (flags[i]) cell.textContent = '🚩';
+                    cell.onclick = () => reveal(i);
+                    cell.oncontextmenu = (e) => { e.preventDefault(); flag(i); };
+                    board.appendChild(cell);
+                });
+            }
+            draw();
+        }
+    </script>
+</body>
+</html>
